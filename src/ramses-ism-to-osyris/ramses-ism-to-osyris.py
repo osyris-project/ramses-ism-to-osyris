@@ -77,12 +77,12 @@ def override_variables(variables):
 
 def convert_hydro(output, hydro_variables):
 
-    # Read the number of variables from the hydro_file_descriptor.txt
-    # and select the ones to be read if specified by user
     hydro_file = os.path.join(output, "hydro_file_descriptor.txt")
-    with open(hydro_file) as f:
-        content = f.readlines()
-    f.close()
+    try:
+        with open(hydro_file) as f:
+            content = f.readlines()
+    except IOError:
+        return
 
     # Check that the file is indeed legacy format before changing it
     if "nvar" not in content[0]:
@@ -117,6 +117,7 @@ def convert_part(output, part_variables, ndim):
     part_file = os.path.join(output, "part_file_descriptor.txt")
     if os.path.exists(part_file):
         warnings.warn(f"{part_file} already exists, conversion skipped.")
+        return
 
     nout = output.split('_')[-1]
     header_file = os.path.join(output, f"header_{nout}.txt")
@@ -178,6 +179,7 @@ def convert_rt(output, rt_variables, ndim, write_cons):
     rt_file = os.path.join(output, "rt_file_descriptor.txt")
     if os.path.exists(rt_file):
         warnings.warn(f"{rt_file} already exists, conversion skipped.")
+        return
 
     info_rt = read_parameter_file(fname=infofile)
     if rt_variables is None:
