@@ -16,12 +16,51 @@ parser.add_argument('--file',
                     help='sum the integers (default: find the max)')
 
 
+def generate_fname(nout, path="", ftype="", cpuid=1, ext=""):
+
+    if nout == -1:
+        filelist = sorted(glob.glob(os.path.join(path, "output*")))
+        number = filelist[-1].split("_")[-1]
+    else:
+        number = str(nout).zfill(5)
+
+    infile = os.path.join(path, "output_" + number)
+    if len(ftype) > 0:
+        infile = os.path.join(infile, ftype + "_" + number)
+        if cpuid > 0:
+            infile += ".out" + str(cpuid).zfill(5)
+
+    if len(ext) > 0:
+        infile += ext
+
+    return infile
+
+
+def read_parameter_file(fname=None, delimiter="="):
+    """
+    Read info file and create dictionary
+    """
+    out = {}
+    with open(fname, 'r') as f:
+        content = f.readlines()
+    for line in content:
+        sp = line.split(delimiter)
+        if len(sp) > 1:
+            value = sp[1].strip()
+            try:
+                value = eval(value)
+            except NameError:
+                pass
+            out[sp[0].strip()] = value
+    return out
+
+
 def convert_hydro(output):
 
     # Read the number of variables from the hydro_file_descriptor.txt
     # and select the ones to be read if specified by user
-    hydrofile = os.path.join(output, "hydro_file_descriptor.txt")
-    with open(hydrofile) as f:
+    hydro_file = os.path.join(output, "hydro_file_descriptor.txt")
+    with open(hydro_file) as f:
         content = f.readlines()
     f.close()
 
@@ -34,9 +73,9 @@ def convert_hydro(output):
         "B_right_z": "B_z_right"
     }
 
-    shutil.copyfile(hydrofile, f"{hydrofile}.backup")
+    shutil.copyfile(hydro_file, f"{hydro_file}.backup")
     counter = 0
-    with open(hydrofile, 'w') as f:
+    with open(hydro_file, 'w') as f:
         f.write('# version:  1 \n# ivar, variable_name, variable_type\n')
         for line in content:
             sp = line.split(":")
@@ -125,71 +164,100 @@ def convert_hydro(output):
 
     # # Now for particles ==================================
 
+
+def convert_part(output, ndim):
+
+    nout = output.split('_')[-1]
+    print(nout)
+    header_file = generate_fname(
+        nout,
+        # path,
+        ftype="header",
+        cpuid=-1,
+        ext=".txt")
+    print(header_file)
+
     # particles = False
     # self.info["npart_tot"] = 0
     # if "part" in variables:
     #     # Read header file to get particle information
-    #     headerfile = self.generate_fname(nout,
-    #                                      path,
-    #                                      ftype="header",
-    #                                      cpuid=-1,
-    #                                      ext=".txt")
-    #     with open(headerfile) as f:
-    #         dummy_string = f.readline()
-    #         self.info["npart_tot"] = int(f.readline())
-    #         dummy_string = f.readline()
-    #         self.info["npart_dm"] = int(f.readline())
-    #         dummy_string = f.readline()
-    #         self.info["npart_star"] = int(f.readline())
-    #         dummy_string = f.readline()
-    #         self.info["npart_sink"] = int(f.readline())
-    #         dummy_string = f.readline()
-    #         particle_fields = f.readline().split(' ')[:-1]
-    #     f.close()
-    #     npart_fields = len(particle_fields)
-    #     particles = (self.info["npart_tot"] > 0)
-    #     npart_count = 0
-    #     if particles:
-    #         npart_dims = []
-    #         part_vars = []
-    #         part_types = []
-    #         for field in particle_fields:
-    #             if field == "pos":
-    #                 for n in range(self.info["ndim"]):
-    #                     part_vars.append(xyz_strings[n] + "_part")
-    #                     part_types.append("d")
-    #                 npart_dims.append(self.info["ndim"])
-    #             elif field == "vel":
-    #                 for n in range(self.info["ndim"]):
-    #                     part_vars.append("part_velocity_" + xyz_strings[n])
-    #                     part_types.append("d")
-    #                 npart_dims.append(self.info["ndim"])
-    #             elif field == "tracer_b":
-    #                 for n in range(3):
-    #                     part_vars.append("part_" + field + "_" +
-    #                                      xyz_strings[n])
-    #                     part_types.append("d")
-    #                 npart_dims.append(3)
-    #             else:
-    #                 part_vars.append("part_" + field)
-    #                 npart_dims.append(1)
-    #                 if field == "iord":
-    #                     part_types.append("q")
-    #                 elif field == "level":
-    #                     part_types.append("i")
-    #                 else:
-    #                     part_types.append("d")
-    #         #print sum(npart_dims)
-    #         part = np.zeros([self.info["npart_tot"],
-    #                          sum(npart_dims)],
-    #                         dtype=np.float64)
+    # headerfile = self.generate_fname(nout,
+    #                                  path,
+    #                                  ftype="header",
+    #                                  cpuid=-1,
+    #                                  ext=".txt")
+    try:
+        with open(header_file, 'r') as f:
+            content = f.readlines()
+    except IOError:
+        return
+
+        # dummy_string = f.readline()
+        # self.info["npart_tot"] = int(f.readline())
+        # dummy_string = f.readline()
+        # self.info["npart_dm"] = int(f.readline())
+        # dummy_string = f.readline()
+        # self.info["npart_star"] = int(f.readline())
+        # dummy_string = f.readline()
+        # self.info["npart_sink"] = int(f.readline())
+        # dummy_string = f.readline()
+        # particle_fields = f.readline().split(' ')[:-1]
+
+    particle_fields = content[-1].split()
+    npart_fields = len(particle_fields)
+
+    mapping = {
+        "pos": {
+            "ndim": ndim,
+            "type": "d",
+            "name": "position"
+        },
+        "vel": {
+            "ndim": ndim,
+            "type": "d",
+            "name": "velocity"
+        },
+        "iord": {
+            "ndim": 1,
+            "type": "i",
+            "name": "identity"
+        },
+        "level": {
+            "ndim": 1,
+            "type": "i",
+            "name": "levelp"
+        }
+    }
+
+    part_file = os.path.join(output, "part_file_descriptor.txt")
+    counter = 0
+    with open(part_file, 'w') as f:
+        f.write('# version:  1 \n# ivar, variable_name, variable_type\n')
+        for field in particle_fields:
+            if field in mapping:
+                for n in range(mapping[field]['ndim']):
+                    counter += 1
+                    name = mapping[field]['name']
+                    if mapping[field]['ndim'] > 1:
+                        name += '_' + 'xyz'[n]
+                    f.write(f"{counter}, {name}, {mapping[field]['type']}\n")
+            else:
+                counter += 1
+                f.write(f"{counter}, {field}, d\n")
+
+
+def read_info(output):
+    infofile = os.path.join(output, "info_" + output.split("_")[-1] + ".txt")
+    return read_parameter_file(fname=infofile)
 
 
 def convert(outputs):
     print(outputs)
 
     for output in outputs:
+        info = read_info(output=output)
         convert_hydro(output=output)
+        convert_part(output=output, ndim=info["ndim"])
 
     return
 
@@ -213,6 +281,6 @@ if __name__ == "__main__":
 #    infile+='/'
 #    fname=infile+"hydro_file_descriptor.txt"
 #    print(fname)
-#    HydroConverter.hydroFileDescriptor(infile,fname)
+#    HydroConverter.hydro_fileDescriptor(infile,fname)
 
 #     convert()
