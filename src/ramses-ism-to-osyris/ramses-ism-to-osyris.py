@@ -6,15 +6,35 @@ import os
 import shutil
 import warnings
 
-parser = argparse.ArgumentParser(description='Process some integers.')
+parser = argparse.ArgumentParser(
+    description=
+    'Convert legacy Ramses output formats to new format that can be read by Osyris.')
 parser.add_argument('--dir',
                     type=str,
                     default=None,
-                    help='an integer for the accumulator')
-parser.add_argument('--file',
+                    help='the directory which contains the outputs')
+parser.add_argument('--output',
                     type=str,
                     default=None,
-                    help='sum the integers (default: find the max)')
+                    help='a single output folder that will be converted')
+parser.add_argument(
+    '--hydro',
+    nargs='+',
+    type=str,
+    required=False,
+    help='a list of hydro variables to override the ones found in the output')
+parser.add_argument(
+    '--part',
+    nargs='+',
+    type=str,
+    required=False,
+    help='a list of part variables to override the ones found in the output')
+parser.add_argument(
+    '--rt',
+    nargs='+',
+    type=str,
+    required=False,
+    help='a list of rt variables to override the ones found in the output')
 
 
 def read_parameter_file(fname=None, delimiter="="):
@@ -40,10 +60,22 @@ def write_file_descriptor(filename, variables):
     with open(filename, 'w') as f:
         f.write('# version:  1 \n# ivar, variable_name, variable_type\n')
         for i, var in enumerate(variables):
-            f.write(f"{i}, {var['name']}, {var['type']}\n")
+            f.write(f"{i+1}, {var['name']}, {var['type']}\n")
 
 
-def convert_hydro(output):
+def override_variables(variables):
+    out = []
+    for var in variables:
+        if "," in var:
+            var_name, var_type = var.split(',')
+        else:
+            var_name = var
+            var_type = "d"
+        out.append({"name": var_name, "type": var_type})
+    return out
+
+
+def convert_hydro(output, hydro_variables):
 
     # Read the number of variables from the hydro_file_descriptor.txt
     # and select the ones to be read if specified by user
@@ -65,18 +97,22 @@ def convert_hydro(output):
         "B_right_y": "B_y_right",
         "B_right_z": "B_z_right"
     }
-
     shutil.copyfile(hydro_file, f"{hydro_file}.backup")
-    variables = []
-    for line in content:
-        sp = line.split(":")
-        if len(sp) > 1:
-            var = sp[1].strip()
-            variables.append({"name": mapping.get(var, var), "type": "d"})
+
+    if hydro_variables is None:
+        variables = []
+        for line in content:
+            sp = line.split(":")
+            if len(sp) > 1:
+                var = sp[1].strip()
+                variables.append({"name": mapping.get(var, var), "type": "d"})
+    else:
+        variables = override_variables(hydro_variables)
+
     write_file_descriptor(filename=hydro_file, variables=variables)
 
 
-def convert_part(output, ndim):
+def convert_part(output, part_variables, ndim):
 
     part_file = os.path.join(output, "part_file_descriptor.txt")
     if os.path.exists(part_file):
@@ -117,21 +153,24 @@ def convert_part(output, ndim):
     }
 
     part_file = os.path.join(output, "part_file_descriptor.txt")
-    variables = []
-    for field in particle_fields:
-        if field in mapping:
-            for n in range(mapping[field]['ndim']):
-                name = mapping[field]['name']
-                if mapping[field]['ndim'] > 1:
-                    name += '_' + 'xyz'[n]
-                variables.append({"name": name, "type": mapping[field]["type"]})
-        else:
-            variables.append({"name": field, "type": "d"})
+    if part_variables is None:
+        variables = []
+        for field in particle_fields:
+            if field in mapping:
+                for n in range(mapping[field]['ndim']):
+                    name = mapping[field]['name']
+                    if mapping[field]['ndim'] > 1:
+                        name += '_' + 'xyz'[n]
+                    variables.append({"name": name, "type": mapping[field]["type"]})
+            else:
+                variables.append({"name": field, "type": "d"})
+    else:
+        variables = override_variables(part_variables)
+
     write_file_descriptor(filename=part_file, variables=variables)
 
 
-def convert_rt(output, ndim, write_cons):
-
+def convert_rt(output, rt_variables, ndim, write_cons):
     infofile = os.path.join(output, "info_rt_", output.split("_")[-1], ".txt")
     if not os.path.exists(infofile):
         return
@@ -141,16 +180,20 @@ def convert_rt(output, ndim, write_cons):
         warnings.warn(f"{rt_file} already exists, conversion skipped.")
 
     info_rt = read_parameter_file(fname=infofile)
-    variables = []
-    for igrp in range(info_rt["nGroups"]):
-        if write_cons == 1:
-            name = "photon_density_"
-        else:
-            name = "photon_flux_density_"
-        variables.append({"name": f"{name}{igrp+1}", "type": "d"})
-        for n in range(ndim):
-            name = f"photon_flux_{igrp + 1}_{xyz_strings[n]}"
-            variables.append({"name": f"{name}", "type": "d"})
+    if rt_variables is None:
+        variables = []
+        for igrp in range(info_rt["nGroups"]):
+            if write_cons == 1:
+                name = "photon_density_"
+            else:
+                name = "photon_flux_density_"
+            variables.append({"name": f"{name}{igrp+1}", "type": "d"})
+            for n in range(ndim):
+                name = f"photon_flux_{igrp + 1}_{xyz_strings[n]}"
+                variables.append({"name": f"{name}", "type": "d"})
+    else:
+        variables = override_variables(rt_variables)
+
     write_file_descriptor(filename=rt_file, variables=variables)
 
 
@@ -159,13 +202,14 @@ def read_info(output):
     return read_parameter_file(fname=infofile)
 
 
-def convert(outputs):
+def convert(outputs, hydro_variables=None, part_variables=None, rt_variables=None):
     for output in outputs:
         print(f"Processing {output}")
         info = read_info(output=output)
-        convert_hydro(output=output)
-        convert_part(output=output, ndim=info["ndim"])
+        convert_hydro(output=output, hydro_variables=hydro_variables)
+        convert_part(output=output, part_variables=part_variables, ndim=info["ndim"])
         convert_rt(output=output,
+                   rt_variables=rt_variables,
                    ndim=info["ndim"],
                    write_cons=info.get("write_cons", None))
 
@@ -173,12 +217,14 @@ def convert(outputs):
 if __name__ == "__main__":
 
     args = parser.parse_args()
-    if args.file is not None:
-        outputs = [args.file]
+    if args.output is not None:
+        outputs = [args.output]
     elif args.dir is not None:
-        print(os.listdir(args.dir))
         outputs = [
-            os.path.join(args.dir, o) for o in os.listdir(args.dir) if "output_0" in o
+            os.path.join(args.dir, o) for o in os.listdir(args.dir) if "output_" in o
         ]
 
-    convert(outputs=outputs)
+    convert(outputs=outputs,
+            hydro_variables=args.hydro,
+            part_variables=args.part,
+            rt_variables=args.rt)
