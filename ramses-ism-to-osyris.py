@@ -6,9 +6,8 @@ import os
 import shutil
 import warnings
 
-parser = argparse.ArgumentParser(
-    description=
-    'Convert legacy Ramses output formats to new format that can be read by Osyris.')
+parser = argparse.ArgumentParser(description='Convert legacy Ramses output formats to '
+                                 'new format that can be read by Osyris.')
 parser.add_argument('--dir',
                     type=str,
                     default=None,
@@ -128,7 +127,6 @@ def convert_part(output, part_variables, ndim):
         return
 
     particle_fields = content[-1].split()
-    npart_fields = len(particle_fields)
 
     mapping = {
         "pos": {
@@ -191,7 +189,7 @@ def convert_rt(output, rt_variables, ndim, write_cons):
                 name = "photon_flux_density_"
             variables.append({"name": f"{name}{igrp+1}", "type": "d"})
             for n in range(ndim):
-                name = f"photon_flux_{igrp + 1}_{xyz_strings[n]}"
+                name = f"photon_flux_{igrp + 1}_{'xyz'[n]}"
                 variables.append({"name": f"{name}", "type": "d"})
     else:
         variables = override_variables(rt_variables)
