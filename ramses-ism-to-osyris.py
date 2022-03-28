@@ -204,8 +204,8 @@ def convert_sinks(output):
 
     csvfile = os.path.join(output, "sink_" + output.split("_")[-1] + ".csv")
     with open(csvfile, 'r') as f:
-        line = f.readline()
-    if line.strip().startswith("#"):
+        csvdata = f.readlines()
+    if csvdata[0].strip().startswith("#"):
         raise RuntimeError("The sink.csv file does not appear to be legacy format.")
 
     with open(infofile, 'r') as f:
@@ -215,7 +215,12 @@ def convert_sinks(output):
             info_line = line
             break
 
-    unit_mapping = {"Lsol": "L_sol", "Msol": "M_sol", "y": "year"}
+    unit_mapping = {
+        "Lsol": "L_sol",
+        "Msol": "M_sol",
+        "y": "year",
+        "Msol/y": "M_sol/year"
+    }
 
     names_and_units = info_line.split()
     names = []
@@ -228,7 +233,12 @@ def convert_sinks(output):
         names.append(var.split("[")[0])
         units.append(unit_mapping.get(unit, unit))
 
-    print(variables)
+    shutil.copyfile(csvfile, f"{csvfile}.backup")
+    with open(csvfile, 'w') as f:
+        f.write("# " + ",".join(names) + "\n")
+        f.write("# " + ",".join([f"[{u}]" for u in units]) + "\n")
+        for line in csvdata:
+            f.write(line)
 
 
 def read_info(output):
