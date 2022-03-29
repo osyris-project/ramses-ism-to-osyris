@@ -216,27 +216,37 @@ def convert_sinks(output):
             break
 
     unit_mapping = {
-        "Lsol": "L_sol",
-        "Msol": "M_sol",
-        "y": "year",
-        "Msol/y": "M_sol/year"
+        "[Lsol]": "[L_sol]",
+        "[Msol]": "[M_sol]",
+        "[y]": "[year]",
+        "[Msol/y]": "[M_sol/year]"
+    }
+
+    code_unit_quantities = {
+        "x": "l",
+        "y": "l",
+        "z": "l",
+        "vx": "l t**-1",
+        "vy": "l t**-1",
+        "vz": "l t**-1"
     }
 
     names_and_units = info_line.split()
     names = []
     units = []
     for var in names_and_units:
+        name = var.split("[")[0]
+        names.append(name)
         if all(x in var for x in ["[", "]"]):
-            unit = var.split("[")[1].split("]")[0]
+            unit = "[" + var.split("[")[1].split("]")[0].strip() + "]"
         else:
-            unit = "1"
-        names.append(var.split("[")[0])
+            unit = code_unit_quantities.get(name, "1")
         units.append(unit_mapping.get(unit, unit))
 
     shutil.copyfile(csvfile, f"{csvfile}.backup")
     with open(csvfile, 'w') as f:
         f.write("# " + ",".join(names) + "\n")
-        f.write("# " + ",".join([f"[{u}]" for u in units]) + "\n")
+        f.write("# " + ",".join(units) + "\n")
         for line in csvdata:
             f.write(line)
 
