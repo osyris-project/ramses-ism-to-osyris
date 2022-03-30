@@ -197,6 +197,60 @@ def convert_rt(output, rt_variables, ndim, write_cons):
     write_file_descriptor(filename=rt_file, variables=variables)
 
 
+def convert_sinks(output):
+    infofile = os.path.join(output, "sink_" + output.split("_")[-1] + ".info")
+    if not os.path.exists(infofile):
+        return
+
+    csvfile = os.path.join(output, "sink_" + output.split("_")[-1] + ".csv")
+    with open(csvfile, 'r') as f:
+        csvdata = f.readlines()
+    if csvdata[0].strip().startswith("#"):
+        raise RuntimeError("The sink.csv file does not appear to be legacy format.")
+
+    with open(infofile, 'r') as f:
+        info_sink = f.readlines()
+    for line in info_sink:
+        if line.strip().startswith("Id"):
+            info_line = line
+            break
+
+    unit_mapping = {
+        "[Lsol]": "[L_sol]",
+        "[Msol]": "[M_sol]",
+        "[y]": "[year]",
+        "[Msol/y]": "[M_sol/year]"
+    }
+
+    code_unit_quantities = {
+        "x": "l",
+        "y": "l",
+        "z": "l",
+        "vx": "l t**-1",
+        "vy": "l t**-1",
+        "vz": "l t**-1"
+    }
+
+    names_and_units = info_line.split()
+    names = []
+    units = []
+    for var in names_and_units:
+        name = var.split("[")[0]
+        names.append(name)
+        if all(x in var for x in ["[", "]"]):
+            unit = "[" + var.split("[")[1].split("]")[0].strip() + "]"
+        else:
+            unit = code_unit_quantities.get(name, "1")
+        units.append(unit_mapping.get(unit, unit))
+
+    shutil.copyfile(csvfile, f"{csvfile}.backup")
+    with open(csvfile, 'w') as f:
+        f.write("# " + ",".join(names) + "\n")
+        f.write("# " + ",".join(units) + "\n")
+        for line in csvdata:
+            f.write(line)
+
+
 def read_info(output):
     infofile = os.path.join(output, "info_" + output.split("_")[-1] + ".txt")
     return read_parameter_file(fname=infofile)
@@ -212,6 +266,7 @@ def convert(outputs, hydro_variables=None, part_variables=None, rt_variables=Non
                    rt_variables=rt_variables,
                    ndim=info["ndim"],
                    write_cons=info.get("write_cons", None))
+        convert_sinks(output=output)
 
 
 if __name__ == "__main__":
