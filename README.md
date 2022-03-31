@@ -1,6 +1,6 @@
 # ramses-ism-to-osyris
 
-Convert old `ramses_ism` outputs file format to work with `osyris` 2.0.
+Convert old `ramses_ism` outputs file format to work with `osyris`>=2.8.
 
 ## Usage
 
